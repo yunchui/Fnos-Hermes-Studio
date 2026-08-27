@@ -1,0 +1,45 @@
+name: Sync fnos-source
+
+# 当 Hermes Studio FPK 构建并发布新版本后，自动同步
+# https://github.com/yunchui/fnos-source 的版本信息。
+# 需在 Fnos-Hermes-Studio 仓库 Secrets 配置 FNOS_SOURCE_PAT
+# （对 fnos-source 有写权限的 GitHub PAT）。
+
+on:
+  workflow_run:
+    workflows: ["Build fnOS Hermes Studio FPK"]
+    types: [completed]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-source:
+    runs-on: ubuntu-latest
+    if: github.repository == 'yunchui/Fnos-Hermes-Studio'
+
+    steps:
+      - name: Checkout current repo (Fnos-Hermes-Studio)
+        uses: actions/checkout@v4
+
+      - name: Checkout fnos-source
+        uses: actions/checkout@v4
+        with:
+          repository: yunchui/fnos-source
+          token: ${{ secrets.FNOS_SOURCE_PAT }}
+          path: source
+
+      - name: Run sync script
+        env:
+          GH_TOKEN: ${{ secrets.FNOS_SOURCE_PAT }}
+        run: |
+          python3 scripts/sync-fnos-source.py source
+
+      - name: Push to fnos-source
+        run: |
+          cd source
+          git push
+          echo "已推送 fnos-source"
