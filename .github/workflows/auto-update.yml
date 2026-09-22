@@ -33,8 +33,10 @@ jobs:
           # hermes-web-ui：跟踪官方 GitHub Release（EKKOLearnAI/hermes-studio）。
           # 官方在 release 上随版本即时发布预构建产物，比 npm 发布更及时；其 release 被官方
           # 显式标记为「非 latest」，故不能取 releases/latest，需自行过滤版本标签（^v\d+\.\d+\.\d+$）。
+          # 取「发布最新且自带完整预构建产物 hermes-web-ui-<ver>.tar.gz」的版本：
+          # 官方偶发只传 apk 缺 tarball（如 v1.0.4），按发布时间倒序跳过缺产物版本，落到有产物的最新版。
           WEBUI_LATEST="$(curl -fsSL --max-time 30 "https://api.github.com/repos/EKKOLearnAI/hermes-studio/releases?per_page=100" \
-            | python3 -c 'import sys,json,re; d=json.load(sys.stdin); rel=[r for r in d if re.match(r"^v\d+\.\d+\.\d+$", r["tag_name"]) and not r.get("prerelease")]; rel.sort(key=lambda r: r["published_at"], reverse=True); print(rel[0]["tag_name"].lstrip("v") if rel else "")')"
+            | python3 -c 'import sys,json; d=json.load(sys.stdin); rs=[r for r in d if r["tag_name"].count(".")==2 and r["tag_name"].startswith("v") and not r.get("prerelease")]; rs.sort(key=lambda r:r["published_at"],reverse=True); a=next((r for r in rs if ("hermes-web-ui-"+r["tag_name"][1:]+".tar.gz") in [x["name"] for x in r.get("assets",[])]), None); print(a["tag_name"][1:] if a else "")')" 
           # hermes-agent：仍跟踪 NousResearch/hermes-agent 最新 release 标签
           AGENT_LATEST="$(curl -fsSL --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/NousResearch/hermes-agent/releases/latest \
