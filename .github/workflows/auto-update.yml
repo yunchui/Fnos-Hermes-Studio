@@ -57,9 +57,19 @@ jobs:
             echo "::error:: 官方 release v${WEBUI_LATEST} 缺少 hermes-web-ui-${WEBUI_LATEST}.tar.gz 预构建产物，中止更新"
             exit 1
           fi
-          if ! curl -fsSL --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-               "https://api.github.com/repos/NousResearch/hermes-agent/tarball/$AGENT_LATEST" >/dev/null 2>&1; then
-            echo "::error:: GitHub 上不存在 hermes-agent 标签 $AGENT_LATEST（tarball 不可达），中止更新"
+          # tarball 探测加重试：GitHub archive 端点偶发 404（2026-10-19 实测），避免日检误报
+          TARBALL_OK=0
+          for _try in 1 2 3; do
+            if curl -fsSL --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                 "https://api.github.com/repos/NousResearch/hermes-agent/tarball/$AGENT_LATEST" >/dev/null 2>&1; then
+              TARBALL_OK=1
+              break
+            fi
+            echo "tarball 探测第 ${_try} 次失败，10s 后重试..."
+            sleep 10
+          done
+          if [ "$TARBALL_OK" != "1" ]; then
+            echo "::error:: GitHub 上不存在 hermes-agent 标签 $AGENT_LATEST（tarball 不可达，已重试 3 次），中止更新"
             exit 1
           fi
 
