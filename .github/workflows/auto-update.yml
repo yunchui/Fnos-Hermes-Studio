@@ -10,8 +10,8 @@ name: Auto-update upstream versions
 
 on:
   schedule:
-    # 每天 UTC 03:17 检查一次上游（避开整点，降低 GitHub 限流概率）
-    - cron: '17 3 * * *'
+    # 每天检查 3 次（UTC 01:17/09:17/17:17，避开整点降限流）：对齐上游，官方发版滞后从 ~24h 压到 ~8h
+    - cron: '17 1,9,17 * * *'
   workflow_dispatch:
 
 permissions:
@@ -57,19 +57,22 @@ jobs:
             echo "::error:: 官方 release v${WEBUI_LATEST} 缺少 hermes-web-ui-${WEBUI_LATEST}.tar.gz 预构建产物，中止更新"
             exit 1
           fi
-          # tarball 探测加重试：GitHub archive 端点偶发 404（2026-10-19 实测），避免日检误报
-          TARBALL_OK=0
-          for _try in 1 2 3; do
-            if curl -fsSL --max-time 30 -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 "https://api.github.com/repos/NousResearch/hermes-agent/tarball/$AGENT_LATEST" >/dev/null 2>&1; then
-              TARBALL_OK=1
+          # hermes-agent：校验标签存在。用 git/refs/tags 单请求检查替代 tarball 下载——
+          # tarball 需跟随 302→codeload 重定向链，瞬时故障概率高（上游 2026-08-23 曾踩坑）；
+          # refs 检查为单请求、无重定向；带 3 次重试兜底。
+          AGENT_TAG_CODE=""
+          for attempt in 1 2 3; do
+            AGENT_TAG_CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/NousResearch/hermes-agent/git/refs/tags/${AGENT_LATEST}" || echo 000)"
+            if [ "$AGENT_TAG_CODE" = "200" ]; then
               break
             fi
-            echo "tarball 探测第 ${_try} 次失败，10s 后重试..."
+            echo "hermes-agent 标签校验第 $attempt 次 -> HTTP $AGENT_TAG_CODE，10s 后重试..."
             sleep 10
           done
-          if [ "$TARBALL_OK" != "1" ]; then
-            echo "::error:: GitHub 上不存在 hermes-agent 标签 $AGENT_LATEST（tarball 不可达，已重试 3 次），中止更新"
+          if [ "$AGENT_TAG_CODE" != "200" ]; then
+            echo "::error:: GitHub 上不存在 hermes-agent 标签 $AGENT_LATEST（git refs HTTP $AGENT_TAG_CODE），中止更新"
             exit 1
           fi
 
