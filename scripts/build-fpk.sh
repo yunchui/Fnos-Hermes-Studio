@@ -128,10 +128,17 @@ ensure_hermes_agent_src() {
     (
         cd "$src_dir"
         git init -q 2>/dev/null || true
+        # 禁用自动 gc：hermes-agent 源码对象数远超 gc --auto 阈值(6700)，
+        # commit 后 git 会在后台触发自动 gc，把松散对象(loose objects)重写/打包成
+        # packfile；fnpack 打包 app/ 时正遍历 .git/objects/xx/yyy，就读到已被
+        # gc 移走的文件 → lstat "no such file or directory" → 整个 FPK 构建失败(偶发)。
+        # 关闭自动 gc 后松散对象稳定存在，安装侧离线识别只需 .git 存在即可。
+        git config gc.auto 0 2>/dev/null || true
         git config user.email "build@local" 2>/dev/null || true
         git config user.name "FPK Builder" 2>/dev/null || true
         git add -A 2>/dev/null || true
         git commit -q -m "offline bundle" 2>/dev/null || true
+        # _never_ run git gc here — keep loose objects intact for fnpack lstat walk
     )
 
     touch "$marker"
